@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import express from "express"
 import cors from "cors"
+import { verifySmtp } from "./utils/nodemailer.js";
 
 const app = express();
 
@@ -14,6 +15,13 @@ app.use(express.urlencoded({extended: true}));
 
 app.get("/", (req, res)=> {
     res.send("Auth MicroService Running");
+})
+
+app.get("/smtp", (req, res) => {
+    const conn = verifySmtp;
+    if(!conn) return;
+
+    res.send("Smtp Connected Successfully")
 })
 
 export {app};
