@@ -1,5 +1,9 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs"
+import { ApiError } from "./ApiError.js";
+import dotenv from "dotenv"
+
+dotenv.config()
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUDNAME,
@@ -10,7 +14,7 @@ cloudinary.config({
 const uploadOnCloudinary = async(localFilePath) => {
     try {
         if(!localFilePath) {
-            return res.status(400).json({message: "FilePath Required"});
+            throw new ApiError(400, "FilePath Required")
         }
 
         const response = await cloudinary.uploader.upload(localFilePath, {

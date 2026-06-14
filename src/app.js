@@ -24,4 +24,10 @@ app.get("/smtp", (req, res) => {
     res.send("Smtp Connected Successfully")
 })
 
+// import route
+import UserRouter from "./routes/user.routes.js"
+
+// route declartion
+app.use("/api/v1/auth", UserRouter);
+
 export {app};
