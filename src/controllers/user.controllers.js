@@ -144,22 +144,46 @@ const loginUser = asyncHandler(async (req, res) => {
         throw new ApiError(404, "User Not Found");
     }
 
+    const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
+
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+        throw new ApiError(403,  `Account locked. Try again in ${remainingMinutes} minute(s).`)
+    }
+
     const isPasswordCorrect = await user.isPasswordCorrect(password);
 
     if (!isPasswordCorrect) {
+
+        user.failedLoginAttempts += 1;
+
+        if (user.failedLoginAttempts >= 5) {
+            user.lockUntil = Date.now() + 15 * 60 * 1000;
+        }
+
+        await user.save({
+            validateBeforeSave: false
+        });
+
         throw new ApiError(400, "Invalid Credintials");
     }
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
 
     user.password = undefined;
-    
+
     const cookieOption = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         maxAge: 7 * 24 * 60 * 60 * 1000,
     };
+
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+
+    await user.save({
+        validateBeforeSave: false
+    });
 
     return res.status(200)
         .cookie("accessToken", accessToken, cookieOption)

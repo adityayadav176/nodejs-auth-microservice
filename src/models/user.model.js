@@ -56,6 +56,15 @@ const UserSchema = new Schema({
         required: true,
         default: false,
     },
+    failedLoginAttempts: {
+        type: Number,
+        default: 0
+    },
+
+    lockUntil: {
+        type: Date,
+        default: null
+    },
     refreshToken: {
         type: String
     }
