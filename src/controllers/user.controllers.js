@@ -3,7 +3,7 @@ import { transporter } from "../utils/nodemailer.js"
 import { PROJECT_NAME } from "../constant/constant.js"
 import { User } from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
-import { ApiResponse } from "../utils/ApiResponse..js"
+import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -57,13 +57,11 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     const uploadAvatar = await uploadOnCloudinary(avatarLocalPath);
-    console.log("Avatar Upload Result:", uploadAvatar);
     if (!uploadAvatar?.secure_url || !uploadAvatar?.public_id) {
         throw new ApiError(500, "Failed To Upload Avatar");
     }
 
     const uploadCoverImage = await uploadOnCloudinary(coverImageLocalPath);
-    console.log("Cover Upload Result:", uploadCoverImage);
 
     if (!uploadCoverImage?.secure_url || !uploadCoverImage?.public_id) {
         throw new ApiError(500, "Failed To Upload CoverImage");
@@ -138,7 +136,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const user = await User.findOne({
         $or: [{ email: normalizedEmail }, { phoneNo }]
-    }).select("+password");
+    })
 
     if (!user) {
         throw new ApiError(404, "User Not Found");
@@ -168,8 +166,6 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
-
-    user.password = undefined;
 
     const cookieOption = {
         httpOnly: true,
