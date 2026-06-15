@@ -5,6 +5,7 @@ import { User } from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
+import bcrypt from "bcrypt"
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -145,7 +146,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
 
     if (user.lockUntil && user.lockUntil > Date.now()) {
-        throw new ApiError(403,  `Account locked. Try again in ${remainingMinutes} minute(s).`)
+        throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
     }
 
     const isPasswordCorrect = await user.isPasswordCorrect(password);
@@ -196,7 +197,106 @@ const loginUser = asyncHandler(async (req, res) => {
         );
 })
 
+const verifyAccount = asyncHandler(async (req, res) => {
+    const {otp} = req.body;
+
+    if(!otp) {
+        throw new ApiError(400, "Otp required For Verificaition");
+    }
+
+    const userId = req.user?._id;
+    
+    if(!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const user = await User.findById(userId);
+
+    if(!user) {
+        throw new ApiError(404, "User not Found");
+    } 
+
+    if(user.emailVerificationOTPExpiry < Date.now()) {
+        throw new ApiError(409, "Otp Already Expired");
+    }
+
+    const isOtpValid = bcrypt.compare(otp, user.emailVerificationOTP);
+
+    if(!isOtpValid) {
+        throw new ApiError(400, "Invalid Otp");
+    }
+
+   user.isVerified = true
+   user.emailVerificationOTP = undefined;
+   user.emailVerificationOTPExpiry = undefined;
+
+   await user.save({ validateBeforeSave: false });
+
+   return res.status(200)
+   .json(
+    new ApiResponse(200, {}, "Hurry! Your Email Is Now Verified")
+   )
+})
+
+const sendVerifyAccountOtp = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+
+    if (!userId) {
+        throw new ApiError(401, "Unauthorized Access Denied!");
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if (user.isVerified) {
+        throw new ApiError(400, "User Already Verifed");
+    }
+
+    if (user.emailVerificationOTPExpiry && user.emailVerificationOTPExpiry > Date.now()) {
+        throw new ApiError(429, "Please Wait Before requesting Another Otp");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    user.emailVerificationOTP = hashedOtp;
+    user.emailVerificationOTPExpiry = Date.now() + 2 * 60 * 1000;
+
+    await user.save({ validateBeforeSave: false });
+
+    try {
+        await transporter.sendMail({
+            from: process.env.SENDER_EMAIL,
+            to: user.email,
+            subject: "Email Verification Otp",
+            html: `
+         <h2>Email Verification</h2>
+         <p>Your OTP is:</p>
+         <h1>${otp}</h1>
+         <p>Valid for 2 minutes.</p>
+     `
+        })
+
+    } catch (error) {
+        user.emailVerificationOTP = undefined;
+        user.emailVerificationOTPExpiry = undefined;
+        await user.save({ validateBeforeSave: false });
+
+        throw new ApiError(500, "Failed To Send OTP For EmailVerification");
+    }
+    return res.status(200)
+        .json(
+            new ApiResponse(200, {}, "Otp Send To Email Successfully")
+        )
+})
+
 export {
     registerUser,
-    loginUser
+    loginUser,
+    sendVerifyAccountOtp,
+    verifyAccount
 }

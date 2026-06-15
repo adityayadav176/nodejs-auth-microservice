@@ -60,7 +60,13 @@ const UserSchema = new Schema({
         type: Number,
         default: 0
     },
-
+    emailVerificationOTP: {
+        type: String,
+        default: ""
+    },
+    emailVerificationOTPExpiry: {
+        type: Date
+    },
     lockUntil: {
         type: Date,
         default: null
