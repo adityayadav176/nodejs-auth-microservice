@@ -7,6 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import bcrypt from "bcrypt"
 import cloudinary from "cloudinary"
+import {OAuth2Client} from "google-auth-library"
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -29,6 +30,10 @@ const generateAccessAndRefreshToken = async (userId) => {
         refreshToken
     };
 };
+
+const client = new OAuth2Client(
+     process.env.GOOGLE_CLIENT_ID
+)
 
 const registerUser = asyncHandler(async (req, res) => {
     const { name, email, password, phoneNo } = req.body || {}
@@ -670,6 +675,97 @@ const fetchUser = asyncHandler(async (req, res) => {
         )
 })
 
+const googleAuth = asyncHandler(async (req, res) => {
+     const { credential } = req.body;
+
+       if (!credential) {
+        throw new ApiError(
+            400,
+            "Google credential is required"
+        );
+    }
+    
+    const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+
+    if(!payload?.email) {
+        throw new ApiError(400, "Invalid Google Token");
+    }
+
+    const {sub: googleId, email, name, picture} = payload;
+
+      let user = await User.findOne({
+        $or: [
+            { googleId },
+            { email }
+        ]
+    });
+
+      if (!user) {
+        user = await User.create({
+            googleId,
+            name,
+            email,
+            avatar: {
+                url: picture || "",
+                public_id: ""
+            },
+            isVerified: true
+        });
+    }
+
+      else if (!user.googleId) {
+        user.googleId = googleId;
+
+        if (!user.avatar?.url && picture) {
+            user.avatar = {
+                url: picture,
+                public_id: ""
+            };
+        }
+
+        user.isVerified = true;
+
+        await user.save();
+    }
+
+    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+
+    await user.save({validateBeforeSave: false});
+
+    const option = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax"
+    };
+
+    return res.status(200)
+    .cookie("accessToken", accessToken, option)
+    .cookie("refreshToken", refreshToken, option)
+    .json(
+        new ApiResponse(
+            200,
+            {
+                 user: {
+                        _id: user._id,
+                        name: user.name,
+                        email: user.email,
+                        avatar: user.avatar?.url,
+                        role: user.role
+                    },
+                    accessToken
+            },
+            "Google Login Successful"
+        )
+    )
+})
+
 export {
     registerUser,
     loginUser,
@@ -684,4 +780,5 @@ export {
     updateAvatar,
     updateCoverImage,
     fetchUser,
+    googleAuth
 }

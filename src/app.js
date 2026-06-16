@@ -6,21 +6,24 @@ import { verifySmtp } from "./utils/nodemailer.js";
 const app = express();
 
 app.use(cors({
-    origin: ["http://localhost:5173", "http://localhost:3000", "http://localhost:5174"],
-    credentials: true
+    origin: ["http://localhost:5173", "http://127.0.0.1:5500", "http://localhost:5500", "http://localhost:5174"],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
 app.use(cookieParser());
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true }));
 
 
-app.get("/", (req, res)=> {
+app.get("/", (req, res) => {
     res.send("Auth MicroService Running");
 })
 
 app.get("/smtp", (req, res) => {
     const conn = verifySmtp;
-    if(!conn) return;
+    if (!conn) return;
 
     res.send("Smtp Connected Successfully")
 })
@@ -35,4 +38,4 @@ app.use("/api/v1/auth", UserRouter);
 
 app.use(errorHandler);
 
-export {app};
+export { app };

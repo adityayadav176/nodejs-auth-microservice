@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, fetchUser, forgetPassword, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, fetchUser, forgetPassword, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
@@ -41,4 +41,5 @@ router.patch("/update-coverImage",
     upload.single("coverImage"),
     updateCoverImage
 )
+router.post("/google", googleAuth);
 export default router

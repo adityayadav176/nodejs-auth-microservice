@@ -18,33 +18,37 @@ const UserSchema = new Schema({
     coverImage: {
         url: {
             type: String,
-            required: true
+            default: ""
         },
         public_id: {
             type: String,
-            required: true
+            default: ""
         }
+    },
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true,
     },
     password: {
         type: String,
-        required: true,
         minlength: 8,
         maxlength: 100,
     },
     avatar: {
         url: {
             type: String,
-            required: true
+            default: ""
         },
         public_id: {
             type: String,
-            required: true
+            default: ""
         }
     },
     phoneNo: {
         type: String,
-        required: true,
         unique: true,
+        sparse: true,
     },
     role: {
         type: String,
