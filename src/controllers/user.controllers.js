@@ -162,9 +162,9 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
 
-    // if (user.lockUntil && user.lockUntil > Date.now()) {
-    //     throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
-    // }
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+        throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
+    }
 
     const isPasswordCorrect = await user.isPasswordCorrect(password);
 

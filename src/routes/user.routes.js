@@ -21,7 +21,7 @@ router.post(
     registerUser
 );
 
-router.post("/login", loginUser);
+router.post("/login", loginRateLimit, loginUser);
 router.post("/sendEmailVerificationOtp",verifyUser, sendVerifyAccountOtp);
 router.post("/VerifyEmail",verifyUser, verifyAccount);
 router.post("/SendPasswordResetOtp", sendForgetPasswordOtp);
