@@ -9,6 +9,7 @@ import bcrypt from "bcrypt"
 import cloudinary from "cloudinary"
 import { OAuth2Client } from "google-auth-library"
 import crypto from "crypto";
+import axios from "axios";
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -197,9 +198,9 @@ const loginUser = asyncHandler(async (req, res) => {
     });
 
     const loggedInUser = await User.findById(user._id)
-    .select(
-        "-password -refreshToken -forgetPasswordOtp -passwordResetToken -deleteAccountOtp -emailVerificationOTP"
-    );
+        .select(
+            "-password -refreshToken -forgetPasswordOtp -passwordResetToken -deleteAccountOtp -emailVerificationOTP"
+        );
 
     return res.status(200)
         .cookie("accessToken", accessToken, cookieOption)
@@ -852,6 +853,116 @@ const googleAuth = asyncHandler(async (req, res) => {
         )
 })
 
+const githubCallback = asyncHandler(async (req, res) => {
+    const { code } = req.query;
+
+    if (!code) {
+        throw new ApiError(400, "Authorization code is required");
+    }
+
+    // Exchange code for GitHub access token
+    const tokenResponse = await axios.post(
+        "https://github.com/login/oauth/access_token",
+        {
+            client_id: process.env.GITHUB_CLIENT_ID,
+            client_secret: process.env.GITHUB_CLIENT_SECRET,
+            code
+        },
+        {
+            headers: {
+                Accept: "application/json"
+            }
+        }
+    );
+
+    const accessTokenGithub = tokenResponse.data?.access_token;
+
+    if (!accessTokenGithub) {
+        throw new ApiError(400, "Failed to get GitHub access token");
+    }
+
+    // Get GitHub user
+    const { data: githubUser } = await axios.get(
+        "https://api.github.com/user",
+        {
+            headers: {
+                Authorization: `Bearer ${accessTokenGithub}`
+            }
+        }
+    );
+
+    // Get emails
+    const { data: emails } = await axios.get(
+        "https://api.github.com/user/emails",
+        {
+            headers: {
+                Authorization: `Bearer ${accessTokenGithub}`
+            }
+        }
+    );
+
+    const primaryEmail = emails.find(e => e.primary);
+
+    if (!primaryEmail) {
+        throw new ApiError(400, "Primary email not found");
+    }
+
+    const githubId = githubUser.id.toString();
+
+    let user = await User.findOne({
+        $or: [{ githubId }, { email: primaryEmail.email }]
+    });
+
+    if (!user) {
+        user = await User.create({
+            githubId,
+            name: githubUser.name || githubUser.login,
+            email: primaryEmail.email,
+            avatar: {
+                url: githubUser.avatar_url || "",
+                public_id: ""
+            },
+            isVerified: true
+        });
+    } else if (!user.githubId) {
+        user.githubId = githubId;
+        user.isVerified = true;
+        await user.save();
+    }
+
+    const { accessToken, refreshToken } =
+        await generateAccessAndRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    const option = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax"
+    };
+
+    return res.status(200)
+    .cookie("accessToken", accessToken, option)
+    .cookie("refreshToken", refreshToken, option)
+    .json(
+        new ApiResponse(
+            200,
+            {
+                data: {
+                    accessToken,
+                    user: {
+                        id: user._id,
+                        name: user.name,
+                        email: user.email
+                    }
+                }
+            },
+            "GitHub OAuth successfull"
+        )
+    )
+});
+
 export {
     registerUser,
     loginUser,
@@ -866,5 +977,6 @@ export {
     updateAvatar,
     updateCoverImage,
     fetchUser,
-    googleAuth
+    googleAuth,
+    githubCallback
 }

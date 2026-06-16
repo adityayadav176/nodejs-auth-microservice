@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, fetchUser, forgetPassword, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
@@ -42,4 +42,18 @@ router.patch("/update-coverImage",
     updateCoverImage
 )
 router.post("/google", googleAuth);
+router.get("/github", (req, res) => {
+    const redirectUri =
+        "http://localhost:9001/api/v1/auth/github/callback";
+
+    const url =
+        `https://github.com/login/oauth/authorize` +
+        `?client_id=${process.env.GITHUB_CLIENT_ID}` +
+        `&redirect_uri=${redirectUri}` +
+        `&scope=user:email`;
+
+    res.redirect(url);
+});
+
+router.get("/github/callback", githubCallback);
 export default router
