@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutUser, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verify2FALogin, verify2FASetup, verifyAccount } from "../controllers/user.controllers.js"
+import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, githubCallback, googleAuth, loginUser, logoutUser, refreshAccessToken, registerUser, sendDeleteAccountOtp, sendForgetPasswordOtp, sendVerifyAccountOtp, updateAvatar, updateCoverImage, verify2FALogin, verify2FASetup, verifyAccount } from "../controllers/user.controllers.js"
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
@@ -32,6 +32,7 @@ router.post("/logout",verifyUser, logoutUser);
 router.post("/sendDeleteAccountOtp",verifyUser, sendDeleteAccountOtp);
 router.post("/deleteAccount",verifyUser, deleteAccount);
 router.get("/fetchUser",verifyUser, fetchUser);
+router.post("/refreshAccessToken", refreshAccessToken);
 router.patch("/update-avatar",
     verifyUser,
     upload.single("avatar"),

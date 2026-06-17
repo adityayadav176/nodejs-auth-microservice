@@ -9,9 +9,10 @@ import bcrypt from "bcrypt"
 import cloudinary from "cloudinary"
 import { OAuth2Client } from "google-auth-library"
 import crypto from "crypto";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
+import JWT from "jsonwebtoken"
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -1094,15 +1095,78 @@ const verify2FALogin = asyncHandler(async (req, res) => {
     };
 
     return res.status(200)
-    .cookie("accessToken", accessToken, cookieOption)
-    .cookie("refreshToken", refreshToken, cookieOption)
-    .json(
-        new ApiResponse(
-            200,
-            { accessToken, refreshToken },
-            "2FA Verified"
-        )
-    );
+        .cookie("accessToken", accessToken, cookieOption)
+        .cookie("refreshToken", refreshToken, cookieOption)
+        .json(
+            new ApiResponse(
+                200,
+                { accessToken, refreshToken },
+                "2FA Verified"
+            )
+        );
+});
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken =
+        req.cookies?.refreshToken ||
+        req.body?.refreshToken;
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    let decodedToken;
+
+    try {
+        decodedToken = JWT.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        );
+    } catch (error) {
+        console.log(error);
+        throw new ApiError(
+            401,
+            "Invalid or Expired Refresh Token"
+        );
+    }
+
+    const user = await User.findById(decodedToken?._id);
+
+    if (!user) {
+        throw new ApiError(404, "User Not Found");
+    }
+
+    if (incomingRefreshToken !== user.refreshToken) {
+        throw new ApiError(
+            401,
+            "Refresh Token Is Expired Or Already Used"
+        );
+    }
+
+    const { accessToken, refreshToken } =
+        await generateAccessAndRefreshToken(user._id);
+
+    const cookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, cookieOption)
+        .cookie("refreshToken", refreshToken, cookieOption)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    accessToken,
+                    refreshToken,
+                },
+                "Access Token Refreshed Successfully"
+            )
+        );
 });
 
 export {
@@ -1123,5 +1187,6 @@ export {
     githubCallback,
     enable2FA,
     verify2FALogin,
-    verify2FASetup
+    verify2FASetup,
+    refreshAccessToken
 }
