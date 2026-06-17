@@ -6,6 +6,7 @@ import { verifyUser } from "../middleware/verifyUser.middleware.js";
 
 const router = Router();
 
+// api Routes
 router.post(
     "/register",
     upload.fields([
@@ -41,6 +42,8 @@ router.patch("/update-coverImage",
     upload.single("coverImage"),
     updateCoverImage
 )
+
+// oauth Routes
 router.post("/google", googleAuth);
 router.get("/github", (req, res) => {
     const redirectUri =
@@ -56,6 +59,8 @@ router.get("/github", (req, res) => {
 });
 
 router.get("/github/callback", githubCallback);
+
+// 2fa Routes
 router.post("/2fa/enable", verifyUser, enable2FA);
 router.post("/2fa/verify-setup", verifyUser, verify2FASetup);
 router.post("/login/2fa", verify2FALogin);

@@ -1086,7 +1086,17 @@ const verify2FALogin = asyncHandler(async (req, res) => {
     user.refreshToken = refreshToken;
     await user.save();
 
-    return res.status(200).json(
+    const cookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    return res.status(200)
+    .cookie("accessToken", accessToken, cookieOption)
+    .cookie("refreshToken", refreshToken, cookieOption)
+    .json(
         new ApiResponse(
             200,
             { accessToken, refreshToken },
