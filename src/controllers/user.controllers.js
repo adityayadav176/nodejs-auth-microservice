@@ -13,6 +13,8 @@ import axios, { AxiosError } from "axios";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
 import JWT from "jsonwebtoken"
+import { UAParser } from "ua-parser-js"
+import { Session } from "../models/session.model.js"
 
 const generateAccessAndRefreshToken = async (userId) => {
     const user = await User.findById(userId);
@@ -138,7 +140,11 @@ const registerUser = asyncHandler(async (req, res) => {
 })
 
 const loginUser = asyncHandler(async (req, res) => {
-    const { email, phoneNo, password } = req.body
+    const { email, phoneNo, password } = req.body;
+    const ipAddress = req.ip;
+
+    console.log(req.deviceInfo);
+
 
     if ((!email && !phoneNo) || !password) {
         throw new ApiError(400, "All Fileds Are Required");
@@ -210,6 +216,46 @@ const loginUser = asyncHandler(async (req, res) => {
         validateBeforeSave: false
     });
 
+    const { browser, os, device } = req.deviceInfo;
+
+    const hashedRefreshToken =
+    crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
+    const session = await Session.create({
+        userId: user._id,
+        refreshToken: hashedRefreshToken,
+
+        deviceModel: device.model || "",
+        device: device.name || "",
+        deviceType: device.type || "desktop",
+        deviceVendor: device.vendor || "",
+
+        browser: browser.name || "Unknown",
+        browserVersion: browser.version || "",
+
+        os: os.name || "Unknown",
+        osVersion: os.version || "",
+
+        ipAddress,
+
+        userAgent: req.headers["user-agent"] || "",
+    });
+
+    const safeSession = {
+        _id: session._id,
+        deviceName: session.device,
+        deviceModel: session.deviceModel,
+        deviceType: session.deviceType,
+        deviceVendor: session.deviceVendor,
+        browser: session.browser,
+        os: session.os,
+        osVersion: session.osVersion,
+        lastActive: session.lastActive
+    }
+
     const loggedInUser = await User.findById(user._id)
         .select(
             "-password -refreshToken -forgetPasswordOtp -passwordResetToken -deleteAccountOtp -emailVerificationOTP"
@@ -223,9 +269,10 @@ const loginUser = asyncHandler(async (req, res) => {
                 200,
                 {
                     user: loggedInUser,
-                    accessToken,
+                    session: safeSession,
+                    accessToken
                 },
-                "Login Successfully"
+                "User Login OR Seesion Created Successfully"
             )
         );
 })

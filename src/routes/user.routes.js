@@ -3,6 +3,7 @@ import { changeName, deleteAccount, enable2FA, fetchUser, forgetPassword, github
 import { upload } from "../middleware/multer.middleware.js"
 import { loginRateLimit } from "../rateLimiting/loginLimiter.js";
 import { verifyUser } from "../middleware/verifyUser.middleware.js";
+import { deviceInfoMiddleware } from "../middleware/deviceInfoMiddleware.middleware.js";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.post(
     registerUser
 );
 
-router.post("/login", loginRateLimit, loginUser);
+router.post("/login",deviceInfoMiddleware, loginRateLimit, loginUser);
 router.post("/sendEmailVerificationOtp",verifyUser, sendVerifyAccountOtp);
 router.post("/VerifyEmail",verifyUser, verifyAccount);
 router.post("/SendPasswordResetOtp", sendForgetPasswordOtp);
