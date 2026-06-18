@@ -294,7 +294,7 @@ const loginUser = asyncHandler(async (req, res) => {
         );
 })
 
-const logoutUser = asyncHandler(async (req, res) => {
+const logoutCurrentUser = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
     const sessionId = req.sessionId;
 
@@ -1249,7 +1249,7 @@ export {
     forgetPassword,
     changeName,
     deleteAccount,
-    logoutUser,
+    logoutCurrentUser,
     sendDeleteAccountOtp,
     updateAvatar,
     updateCoverImage,

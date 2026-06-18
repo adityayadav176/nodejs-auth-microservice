@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 const getAllSessions = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
-    if(!userId) {
+    if (!userId) {
         throw new ApiError(401, "Unauthorized Access Denied");
     }
 
@@ -15,43 +15,43 @@ const getAllSessions = asyncHandler(async (req, res) => {
         userId: userId,
         isActive: true,
     }).select("-refreshToken -userAgent -__v")
-    .sort({
-        lastActive: -1,
-    })
+        .sort({
+            lastActive: -1,
+        })
 
-    if(!sessions.length) {
+    if (!sessions.length) {
         return res.status(200)
-        .json(
-            new ApiResponse(200, [], "No Active Sessions Found")
-        )
+            .json(
+                new ApiResponse(200, [], "No Active Sessions Found")
+            )
     }
 
     const formattedSessions = sessions.map(session => ({
-    sessionId: session._id,
+        sessionId: session._id,
 
-    deviceName: session.device,
+        deviceName: session.device,
 
-    browser: session.browser,
+        browser: session.browser,
 
-    browserVersion: session.browserVersion,
+        browserVersion: session.browserVersion,
 
-    os: session.os,
+        os: session.os,
 
-    osVersion: session.osVersion,
+        osVersion: session.osVersion,
 
-    deviceType: session.deviceType,
+        deviceType: session.deviceType,
 
-    ipAddress: session.ipAddress,
+        ipAddress: session.ipAddress,
 
-    lastActive: session.lastActive,
+        lastActive: session.lastActive,
 
-    createdAt: session.createdAt
-}));
+        createdAt: session.createdAt
+    }));
 
     return res.status(200)
-    .json(
-        new ApiResponse(200, formattedSessions, "Sessions Fetched Successfully")
-    )
+        .json(
+            new ApiResponse(200, formattedSessions, "Sessions Fetched Successfully")
+        )
 })
 
 const logoutAllDevices = asyncHandler(async (req, res) => {
@@ -100,7 +100,37 @@ const logoutAllDevices = asyncHandler(async (req, res) => {
         );
 });
 
+const logoutSpecificDevice = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user._id;
+
+    if (!sessionId || !userId) {
+        throw new ApiError(401, "Unauthorized Access Denied");
+    }
+
+    const session = await Session.findOneAndDelete({
+        _id: sessionId,
+        userId
+    })
+
+    if (!session) {
+        throw new ApiError(404, "Session Not Found");
+    }
+
+    const cookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+    };
+
+    return res.status(200)
+        .json(
+            new ApiResponse(200, {}, "Device Logged Out Successfully")
+        )
+})
+
 export {
     getAllSessions,
-    logoutAllDevices
+    logoutAllDevices,
+    logoutSpecificDevice
 }
