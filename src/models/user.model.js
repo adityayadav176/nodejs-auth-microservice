@@ -137,7 +137,7 @@ UserSchema.methods.generateAccessToken = function (sessionId) {
     return jwt.sign(
         {
             _id: this._id,
-            sessionId: sessionId,
+            sessionId,
             tokenVersion: this.tokenVersion
         },
         process.env.ACCESS_TOKEN_SECRET,
@@ -151,8 +151,8 @@ UserSchema.methods.generateRefreshToken = function (sessionId) {
     return jwt.sign(
         {
             _id: this._id,
-            sessionId: sessionId,
-            tokenVersion: user.tokenVersion
+            sessionId,
+            tokenVersion: this.tokenVersion
         },
         process.env.REFRESH_TOKEN_SECRET,
         {

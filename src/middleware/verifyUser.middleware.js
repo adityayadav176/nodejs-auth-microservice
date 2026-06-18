@@ -1,3 +1,4 @@
+import { Session } from "../models/session.model.js";
 import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -29,12 +30,24 @@ export const verifyUser = asyncHandler(async (req, _, next) => {
     if (decodedToken.tokenVersion !== user.tokenVersion) {
         throw new ApiError(
             401,
-            "Token has been revoked. Please login again."
+            "Session Expired. Login Again."
+        );
+    }
+
+    const session = await Session.findById(
+        decodedToken.sessionId
+    );
+
+    if (!session) {
+        throw new ApiError(
+            401,
+            "Session Not Found"
         );
     }
 
     req.user = user;
-    req.sessionId = decodedToken.sessionId;
+    req.session = session;
+    req.sessionId = session._id;
 
     next();
 });

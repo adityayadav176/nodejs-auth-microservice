@@ -16,21 +16,16 @@ import JWT from "jsonwebtoken"
 import { UAParser } from "ua-parser-js"
 import { Session } from "../models/session.model.js"
 
-const generateAccessAndRefreshToken = async (userId) => {
+const generateAccessAndRefreshToken = async (userId,sessionId) => {
     const user = await User.findById(userId);
 
     if (!user) {
         throw new ApiError(404, "User not found");
     }
 
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
+    const accessToken = user.generateAccessToken(sessionId);
 
-    user.refreshToken = refreshToken;
-
-    await user.save({
-        validateBeforeSave: false
-    });
+    const refreshToken = user.generateRefreshToken(sessionId);
 
     return {
         accessToken,
@@ -100,14 +95,6 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Something Went Wrong While Register User");
     }
 
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
-
-    user.refreshToken = refreshToken;
-    await user.save({
-        validateBeforeSave: false
-    });
-
     try {
         await transporter.sendMail({
             from: process.env.SENDER_EMAIL,
@@ -132,8 +119,6 @@ const registerUser = asyncHandler(async (req, res) => {
         new ApiResponse(201,
             {
                 user: createdUser,
-                refreshToken,
-                accessToken
             },
             "Register User Successfully")
     )
@@ -200,36 +185,21 @@ const loginUser = asyncHandler(async (req, res) => {
             )
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+    //here
 
-    const cookieOption = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-    };
+    // after password validation
 
-    user.failedLoginAttempts = 0;
-    user.lockUntil = null;
+    const { browser = {}, os = {}, device = {} } =
+        req.deviceInfo || {};
 
-    await user.save({
-        validateBeforeSave: false
-    });
-
-    const { browser, os, device } = req.deviceInfo;
-
-    const hashedRefreshToken =
-    crypto
-      .createHash("sha256")
-      .update(refreshToken)
-      .digest("hex");
-
+    // STEP 1: Create Session First
     const session = await Session.create({
         userId: user._id,
-        refreshToken: hashedRefreshToken,
+
+        refreshToken: "",
 
         deviceModel: device.model || "",
-        device: device.name || "",
+        device: device.model || "",
         deviceType: device.type || "desktop",
         deviceVendor: device.vendor || "",
 
@@ -241,20 +211,67 @@ const loginUser = asyncHandler(async (req, res) => {
 
         ipAddress,
 
-        userAgent: req.headers["user-agent"] || "",
+        userAgent:
+            req.headers["user-agent"] || ""
+    });
+
+    // STEP 2: Generate Tokens Using SessionId
+    const accessToken =
+        user.generateAccessToken(session._id);
+
+    const refreshToken =
+        user.generateRefreshToken(session._id);
+
+    // STEP 3: Hash Refresh Token
+    const hashedRefreshToken = crypto
+        .createHash("sha256")
+        .update(refreshToken)
+        .digest("hex");
+
+    // STEP 4: Save Hash In Session
+    session.refreshToken = hashedRefreshToken;
+
+    await session.save({
+        validateBeforeSave: false
+    });
+
+    // STEP 5: Reset Login Attempts
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+
+    await user.save({
+        validateBeforeSave: false
     });
 
     const safeSession = {
-        _id: session._id,
-        deviceName: session.device,
+        sessionId: session._id,
+
+        deviceName:
+            session.device ||
+            `${session.browser} on ${session.os}`,
+
         deviceModel: session.deviceModel,
         deviceType: session.deviceType,
         deviceVendor: session.deviceVendor,
+
         browser: session.browser,
+        browserVersion: session.browserVersion,
+
         os: session.os,
         osVersion: session.osVersion,
-        lastActive: session.lastActive
-    }
+
+        ipAddress: session.ipAddress,
+
+        lastActive: session.lastActive,
+        createdAt: session.createdAt
+    };
+
+    const cookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
 
     const loggedInUser = await User.findById(user._id)
         .select(
