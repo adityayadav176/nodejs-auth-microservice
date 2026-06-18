@@ -296,8 +296,9 @@ const loginUser = asyncHandler(async (req, res) => {
 
 const logoutUser = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
+    const sessionId = req.sessionId;
 
-    if (!userId) {
+    if (!userId || !sessionId) {
         throw new ApiError(401, "Unauthorized Access Denied");
     }
 
@@ -315,6 +316,12 @@ const logoutUser = asyncHandler(async (req, res) => {
 
     if (!user) {
         throw new ApiError(404, "User Not Found");
+    }
+
+    const session = await Session.findByIdAndDelete(sessionId);
+
+    if(!session) {
+        throw new ApiError(404, "User Not Fount")
     }
 
     const cookieOption = {
