@@ -1,22 +1,22 @@
-import { uploadOnCloudinary } from "../utils/cloudinary.js"
-import { transporter } from "../utils/nodemailer.js"
-import { PROJECT_NAME } from "../constant/constant.js"
-import { User } from "../models/user.model.js"
-import { ApiError } from "../utils/ApiError.js"
-import { ApiResponse } from "../utils/ApiResponse.js"
-import { asyncHandler } from "../utils/asyncHandler.js"
-import bcrypt from "bcrypt"
-import cloudinary from "cloudinary"
-import { OAuth2Client } from "google-auth-library"
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { transporter } from "../utils/nodemailer.js";
+import { PROJECT_NAME } from "../constant/constant.js";
+import { User } from "../models/user.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import bcrypt from "bcrypt";
+import cloudinary from "cloudinary";
+import { OAuth2Client } from "google-auth-library";
 import crypto from "crypto";
 import axios, { AxiosError } from "axios";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
-import JWT from "jsonwebtoken"
-import { UAParser } from "ua-parser-js"
-import { Session } from "../models/session.model.js"
+import JWT from "jsonwebtoken";
+import { UAParser } from "ua-parser-js";
+import { Session } from "../models/session.model.js";
 
-const generateAccessAndRefreshToken = async (userId,sessionId) => {
+const generateAccessAndRefreshToken = async (userId, sessionId) => {
     const user = await User.findById(userId);
 
     if (!user) {
@@ -185,14 +185,10 @@ const loginUser = asyncHandler(async (req, res) => {
             )
     }
 
-    //here
-
-    // after password validation
-
     const { browser = {}, os = {}, device = {} } =
         req.deviceInfo || {};
 
-    // STEP 1: Create Session First
+    // Create Session First
     const session = await Session.create({
         userId: user._id,
 
@@ -215,27 +211,27 @@ const loginUser = asyncHandler(async (req, res) => {
             req.headers["user-agent"] || ""
     });
 
-    // STEP 2: Generate Tokens Using SessionId
+    // Generate Tokens Using SessionId
     const accessToken =
         user.generateAccessToken(session._id);
 
     const refreshToken =
         user.generateRefreshToken(session._id);
 
-    // STEP 3: Hash Refresh Token
+    // Hash Refresh Token
     const hashedRefreshToken = crypto
         .createHash("sha256")
         .update(refreshToken)
         .digest("hex");
 
-    // STEP 4: Save Hash In Session
+    // Save Hash In Session
     session.refreshToken = hashedRefreshToken;
 
     await session.save({
         validateBeforeSave: false
     });
 
-    // STEP 5: Reset Login Attempts
+    // Reset Login Attempts
     user.failedLoginAttempts = 0;
     user.lockUntil = null;
 
@@ -265,6 +261,50 @@ const loginUser = asyncHandler(async (req, res) => {
         lastActive: session.lastActive,
         createdAt: session.createdAt
     };
+
+    const deviceName =
+        session.device ||
+        `${session.browser || "Unknown Browser"} on ${session.os || "Unknown OS"}`;
+
+    const time = new Date().toISOString();
+
+    await transporter.sendMail({
+        from: process.env.SENDER_EMAIL,
+        to: email,
+        subject: 'New Login Detected on Your Account',
+        html: ` <div style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
+    <div style="max-width:600px; margin:auto; background:#ffffff; padding:20px; border-radius:10px; border:1px solid #e5e5e5;">
+      
+      <h2 style="color:#111;">🔐 New Login Detected</h2>
+
+      <p style="font-size:14px; color:#333;">
+        Hi <b>${user.name}</b>, we noticed a new login to your account.
+      </p>
+
+      <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-top:15px;">
+        <p><b>Device:</b> ${deviceName}</p>
+  <p><b>Browser:</b> ${session.browser || "Unknown"}</p>
+  <p><b>Operating System:</b> ${session.os || "Unknown"}</p>
+  <p><b>IP Address:</b> ${session.ipAddress || req.ip}</p>
+  <p><b>Time:</b> ${time}</p>
+      </div>
+
+      <p style="margin-top:20px; font-size:14px; color:#444;">
+        If this was you, no action is required.
+      </p>
+
+      <p style="font-size:14px; color:#b00020;">
+        If you don’t recognize this activity, please secure your account immediately by changing your password.
+      </p>
+
+      <hr style="margin:20px 0;" />
+
+      <p style="font-size:12px; color:#888;">
+        This is an automated security alert.
+      </p>
+    </div>
+  </div>`
+    })
 
     const cookieOption = {
         httpOnly: true,
@@ -320,7 +360,7 @@ const logoutCurrentUser = asyncHandler(async (req, res) => {
 
     const session = await Session.findByIdAndDelete(sessionId);
 
-    if(!session) {
+    if (!session) {
         throw new ApiError(404, "User Not Fount")
     }
 

@@ -172,10 +172,12 @@ src
 ├── middleware
 │
 ├── models
+|
+├── db
 │
 ├── routes
 │
-├── services
+├── constant
 │
 ├── utils
 │
@@ -324,7 +326,7 @@ POST /api/v1/auth/2fa/enable
 POST /api/v1/auth/2fa/verify-setup
 ```
 
-#### Verify 2FA Login
+### Verify 2FA Login
 
 ```http
 POST /api/v1/auth/login/2fa
