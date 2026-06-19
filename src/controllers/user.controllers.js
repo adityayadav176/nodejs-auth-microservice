@@ -128,8 +128,6 @@ const loginUser = asyncHandler(async (req, res) => {
     const { email, phoneNo, password } = req.body;
     const ipAddress = req.ip;
 
-    console.log(req.deviceInfo);
-
 
     if ((!email && !phoneNo) || !password) {
         throw new ApiError(400, "All Fileds Are Required");
@@ -152,7 +150,10 @@ const loginUser = asyncHandler(async (req, res) => {
         );
     }
 
-    const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (1000 * 60));
+    const remainingMinutes =
+        user.lockUntil
+            ? Math.ceil((user.lockUntil - Date.now()) / (1000 * 60))
+            : 0;
 
     if (user.lockUntil && user.lockUntil > Date.now()) {
         throw new ApiError(403, `Account locked. Try again in ${remainingMinutes} minute(s).`)
@@ -176,13 +177,16 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 
     if (user.twoFactorEnabled) {
-        return res.status(200)
-            .json(
-                new ApiResponse({
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {
                     twoFactorRequired: true,
                     userId: user._id
-                })
+                },
+                "2FA required"
             )
+        );
     }
 
     const { browser = {}, os = {}, device = {} } =
@@ -195,7 +199,7 @@ const loginUser = asyncHandler(async (req, res) => {
         refreshToken: "",
 
         deviceModel: device.model || "",
-        device: device.model || "",
+        device: device.name || `${browser} on ${os}`,
         deviceType: device.type || "desktop",
         deviceVendor: device.vendor || "",
 
@@ -270,7 +274,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     await transporter.sendMail({
         from: process.env.SENDER_EMAIL,
-        to: email,
+        to: user.email,
         subject: 'New Login Detected on Your Account',
         html: ` <div style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
     <div style="max-width:600px; margin:auto; background:#ffffff; padding:20px; border-radius:10px; border:1px solid #e5e5e5;">
@@ -303,10 +307,17 @@ const loginUser = asyncHandler(async (req, res) => {
         This is an automated security alert.
       </p>
     </div>
-  </div>`
-    })
+  </div>`,
+    }).catch(err => console.error("Email error:", err));
 
-    const cookieOption = {
+    const accessCookieOption = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 15 * 60 * 1000,
+    };
+
+    const refreshCookieOption = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
@@ -319,8 +330,8 @@ const loginUser = asyncHandler(async (req, res) => {
         );
 
     return res.status(200)
-        .cookie("accessToken", accessToken, cookieOption)
-        .cookie("refreshToken", refreshToken, cookieOption)
+        .cookie("accessToken", accessToken, accessCookieOption)
+        .cookie("refreshToken", refreshToken, refreshCookieOption)
         .json(
             new ApiResponse(
                 200,
@@ -944,148 +955,118 @@ const googleAuth = asyncHandler(async (req, res) => {
         await user.save();
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+    const { browser = {}, os = {}, device = {} } =
+        req.deviceInfo || {};
 
-    user.refreshToken = refreshToken;
+    // Create Session First
+    const session = await Session.create({
+        userId: user._id,
 
-    await user.save({ validateBeforeSave: false });
+        refreshToken: "",
 
-    const option = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax"
-    };
+        deviceModel: device.model || "",
+        device: device.name ||
+            `${browser} on ${os}`,
+        deviceType: device.type || "desktop",
+        deviceVendor: device.vendor || "",
 
-    return res.status(200)
-        .cookie("accessToken", accessToken, option)
-        .cookie("refreshToken", refreshToken, option)
-        .json(
-            new ApiResponse(
-                200,
-                {
-                    user: {
-                        _id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        avatar: user.avatar?.url,
-                        role: user.role
-                    },
-                    accessToken
-                },
-                "Google Login Successful"
-            )
-        )
-})
+        browser: browser.name || "Unknown",
+        browserVersion: browser.version || "",
 
-const githubCallback = asyncHandler(async (req, res) => {
-    const { code } = req.query;
+        os: os.name || "Unknown",
+        osVersion: os.version || "",
 
-    if (!code) {
-        throw new ApiError(400, "Authorization code is required");
-    }
+        ipAddress: req.ip,
 
-    // Exchange code for GitHub access token
-    const tokenResponse = await axios.post(
-        "https://github.com/login/oauth/access_token",
-        {
-            client_id: process.env.GITHUB_CLIENT_ID,
-            client_secret: process.env.GITHUB_CLIENT_SECRET,
-            code
-        },
-        {
-            headers: {
-                Accept: "application/json"
-            }
-        }
-    );
-
-    const accessTokenGithub = tokenResponse.data?.access_token;
-
-    if (!accessTokenGithub) {
-        throw new ApiError(400, "Failed to get GitHub access token");
-    }
-
-    // Get GitHub user
-    const { data: githubUser } = await axios.get(
-        "https://api.github.com/user",
-        {
-            headers: {
-                Authorization: `Bearer ${accessTokenGithub}`
-            }
-        }
-    );
-
-    // Get emails
-    const { data: emails } = await axios.get(
-        "https://api.github.com/user/emails",
-        {
-            headers: {
-                Authorization: `Bearer ${accessTokenGithub}`
-            }
-        }
-    );
-
-    const primaryEmail = emails.find(e => e.primary);
-
-    if (!primaryEmail) {
-        throw new ApiError(400, "Primary email not found");
-    }
-
-    const githubId = githubUser.id.toString();
-
-    let user = await User.findOne({
-        $or: [{ githubId }, { email: primaryEmail.email }]
+        userAgent:
+            req.headers["user-agent"] || ""
     });
 
-    if (!user) {
-        user = await User.create({
-            githubId,
-            name: githubUser.name || githubUser.login,
-            email: primaryEmail.email,
-            avatar: {
-                url: githubUser.avatar_url || "",
-                public_id: ""
-            },
-            isVerified: true
-        });
-    } else if (!user.githubId) {
-        user.githubId = githubId;
-        user.isVerified = true;
-        await user.save();
-    }
+    // Generate Tokens Using SessionId
+    const accessToken =
+        user.generateAccessToken(session._id);
 
-    const { accessToken, refreshToken } =
-        await generateAccessAndRefreshToken(user._id);
+    const refreshToken =
+        user.generateRefreshToken(session._id);
 
-    user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false });
+    // Hash Refresh Token
+    const hashedRefreshToken = crypto
+        .createHash("sha256")
+        .update(refreshToken)
+        .digest("hex");
 
-    const option = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax"
+    // Save Hash In Session
+    session.refreshToken = hashedRefreshToken;
+
+    await session.save({
+        validateBeforeSave: false
+    });
+
+    // Reset Login Attempts
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+
+    await user.save({
+        validateBeforeSave: false
+    });
+
+    const safeSession = {
+        sessionId: session._id,
+
+        deviceName:
+            session.device ||
+            `${session.browser} on ${session.os}`,
+
+        deviceModel: session.deviceModel,
+        deviceType: session.deviceType,
+        deviceVendor: session.deviceVendor,
+
+        browser: session.browser,
+        browserVersion: session.browserVersion,
+
+        os: session.os,
+        osVersion: session.osVersion,
+
+        ipAddress: session.ipAddress,
+
+        lastActive: session.lastActive,
+        createdAt: session.createdAt
     };
 
+    const accessCookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 15 * 60 * 1000, // 15 min
+    };
+
+    const refreshCookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    const loggedInUser = await User.findById(user._id)
+        .select(
+            "-password -refreshToken -forgetPasswordOtp -passwordResetToken -deleteAccountOtp -emailVerificationOTP"
+        );
+
     return res.status(200)
-        .cookie("accessToken", accessToken, option)
-        .cookie("refreshToken", refreshToken, option)
+        .cookie("accessToken", accessToken, accessCookieOptions)
+        .cookie("refreshToken", refreshToken, refreshCookieOptions)
         .json(
             new ApiResponse(
                 200,
                 {
-                    data: {
-                        accessToken,
-                        user: {
-                            id: user._id,
-                            name: user.name,
-                            email: user.email
-                        }
-                    }
+                    user: loggedInUser,
+                    session: safeSession,
+                    accessToken
                 },
-                "GitHub OAuth successfull"
+                "User logged in successfully via Google"
             )
-        )
-});
+        );
+})
 
 const enable2FA = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);

@@ -47,20 +47,6 @@ router.patch("/update-coverImage",
 
 // oauth Routes
 router.post("/google", googleAuth);
-router.get("/github", (req, res) => {
-    const redirectUri =
-        "http://localhost:9001/api/v1/auth/github/callback";
-
-    const url =
-        `https://github.com/login/oauth/authorize` +
-        `?client_id=${process.env.GITHUB_CLIENT_ID}` +
-        `&redirect_uri=${redirectUri}` +
-        `&scope=user:email`;
-
-    res.redirect(url);
-});
-
-router.get("/github/callback", githubCallback);
 
 // 2fa Routes
 router.post("/2fa/enable", verifyUser, enable2FA);
